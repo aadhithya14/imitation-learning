@@ -72,10 +72,6 @@ def test_main_console(script_mod):
 PREFERENCE_COMPARISON_CONFIGS = [
     {},
     {
-        # TODO(ejnnr): the policy we load was trained on 8 parallel environments
-        # and for some reason using it breaks if we use just 1 (like would be the
-        # default with the fast named_config)
-        "common": dict(num_vec=8),
         # We're testing preference saving and disabling sampling here as well;
         # having yet another run just for those would be wasteful since they
         # don't interact with warm starting an agent.
