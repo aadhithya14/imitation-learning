@@ -1,12 +1,15 @@
 """Common configuration element for scripts learning from demonstrations."""
 
 import logging
-import os
 from typing import Optional, Sequence
 
+import gym
 import sacred
+from stable_baselines3.common import policies
+from stable_baselines3.common.vec_env import DummyVecEnv
 
-from imitation.data import types
+from imitation.data import rollout, types
+from imitation.data.wrappers import RolloutInfoWrapper
 
 demonstrations_ingredient = sacred.Ingredient("demonstrations")
 logger = logging.getLogger(__name__)
@@ -15,10 +18,7 @@ logger = logging.getLogger(__name__)
 @demonstrations_ingredient.config
 def config():
     # Demonstrations
-    data_dir = "data/"
-    rollout_path = None  # path to file containing rollouts
-    n_expert_demos = None  # Num demos used. None uses every demo possible
-
+    n_expert_demos = 50  # Num demos used.
     locals()  # quieten flake8
 
 
@@ -27,36 +27,17 @@ def fast():
     n_expert_demos = 1  # noqa: F841
 
 
-def guess_expert_dir(data_dir: str, env_name: str) -> str:
-    rollout_hint = env_name.rsplit("-", 1)[0].replace("/", "_").lower()
-    return os.path.join(data_dir, "expert_models", f"{rollout_hint}_0")
-
-
-@demonstrations_ingredient.config_hook
-def hook(config, command_name, logger):
-    """If rollout_path not set explicitly, then guess it based on environment name."""
-    del command_name, logger
-    updates = {}
-    if config["demonstrations"]["rollout_path"] is None:
-        data_dir = config["demonstrations"]["data_dir"]
-        env_name = config["common"]["env_name"].replace("/", "_")
-        updates["rollout_path"] = os.path.join(
-            guess_expert_dir(data_dir, env_name),
-            "rollouts",
-            "final.pkl",
-        )
-    return updates
-
-
 @demonstrations_ingredient.capture
-def load_expert_trajs(
-    rollout_path: str,
+def generate_expert_trajs(
+    expert: policies.BasePolicy,
+    env_name: str,
     n_expert_demos: Optional[int],
 ) -> Sequence[types.Trajectory]:
-    """Loads expert demonstrations.
+    """Generates expert demonstrations.
 
     Args:
-        rollout_path: A path containing a pickled sequence of `types.Trajectory`.
+        expert: The expert to sample trajectories from.
+        env_name: The name of the environment, that the expert was created for.
         n_expert_demos: The number of trajectories to load.
             Dataset is truncated to this length if specified.
 
@@ -66,14 +47,11 @@ def load_expert_trajs(
     Raises:
         ValueError: There are fewer trajectories than `n_expert_demos`.
     """
-    expert_trajs = types.load(rollout_path)
-    logger.info(f"Loaded {len(expert_trajs)} expert trajectories from '{rollout_path}'")
-    if n_expert_demos is not None:
-        if len(expert_trajs) < n_expert_demos:
-            raise ValueError(
-                f"Want to use n_expert_demos={n_expert_demos} trajectories, but only "
-                f"{len(expert_trajs)} are available via {rollout_path}.",
-            )
-        expert_trajs = expert_trajs[:n_expert_demos]
-        logger.info(f"Truncated to {n_expert_demos} expert trajectories")
-    return expert_trajs
+    rollout_env = DummyVecEnv(
+        [lambda: RolloutInfoWrapper(gym.make(env_name)) for _ in range(4)]
+    )
+    return rollout.rollout(
+        expert,
+        rollout_env,
+        rollout.make_sample_until(min_timesteps=2000, min_episodes=n_expert_demos),
+    )

@@ -51,14 +51,6 @@ def defaults(
     if dagger["expert_policy_type"] is None and dagger["expert_policy_path"] is None:
         dagger = dict(
             expert_policy_type="ppo",
-            expert_policy_path=os.path.join(
-                demos_common.guess_expert_dir(
-                    demonstrations["data_dir"],
-                    common["env_name"],
-                ),
-                "policies",
-                "final",
-            ),
         )
 
 
@@ -105,7 +97,7 @@ def seals_ant():
 
 @train_imitation_ex.named_config
 def half_cheetah():
-    common = dict(env_name="HalfCheetah-v2")
+    common = dict(env_name="seals/HalfCheetah-v0")
     bc_kwargs = dict(l2_weight=0.0)
     dagger = dict(total_timesteps=60000)
 

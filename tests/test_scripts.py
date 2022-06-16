@@ -44,10 +44,6 @@ ALL_SCRIPTS_MODS = [
     train_rl,
 ]
 
-CARTPOLE_TEST_DATA_PATH = pathlib.Path("tests/testdata/expert_models/cartpole_0/")
-CARTPOLE_TEST_ROLLOUT_PATH = CARTPOLE_TEST_DATA_PATH / "rollouts/final.pkl"
-CARTPOLE_TEST_POLICY_PATH = CARTPOLE_TEST_DATA_PATH / "policies/final"
-
 
 @pytest.fixture(autouse=True)
 def sacred_capture_use_sys():
@@ -76,10 +72,8 @@ def test_main_console(script_mod):
 PREFERENCE_COMPARISON_CONFIGS = [
     {},
     {
-        "trajectory_path": CARTPOLE_TEST_ROLLOUT_PATH,
     },
     {
-        "agent_path": CARTPOLE_TEST_POLICY_PATH,
         # TODO(ejnnr): the policy we load was trained on 8 parallel environments
         # and for some reason using it breaks if we use just 1 (like would be the
         # default with the fast named_config)
@@ -156,10 +150,8 @@ def test_train_dagger_main(tmpdir):
             named_configs=["cartpole"] + ALGO_FAST_CONFIGS["imitation"],
             config_updates=dict(
                 common=dict(log_root=tmpdir),
-                demonstrations=dict(rollout_path=CARTPOLE_TEST_ROLLOUT_PATH),
                 dagger=dict(
                     expert_policy_type="ppo",
-                    expert_policy_path=CARTPOLE_TEST_POLICY_PATH,
                 ),
             ),
         )
@@ -180,7 +172,6 @@ def test_train_bc_main(tmpdir):
         named_configs=["cartpole"] + ALGO_FAST_CONFIGS["imitation"],
         config_updates=dict(
             common=dict(log_root=tmpdir),
-            demonstrations=dict(rollout_path=CARTPOLE_TEST_ROLLOUT_PATH),
         ),
     )
     assert run.status == "COMPLETED"
@@ -271,9 +262,6 @@ def test_train_adversarial(tmpdir, named_configs):
         "common": {
             "log_root": tmpdir,
         },
-        "demonstrations": {
-            "rollout_path": CARTPOLE_TEST_ROLLOUT_PATH,
-        },
         # TensorBoard logs to get extra coverage
         "algorithm_kwargs": {"init_tensorboard": True},
     }
@@ -294,9 +282,6 @@ def test_train_adversarial_algorithm_value_error(tmpdir):
             "common": {
                 "log_root": tmpdir,
             },
-            "demonstrations": {
-                "rollout_path": CARTPOLE_TEST_ROLLOUT_PATH,
-            },
         },
     )
 
@@ -306,15 +291,6 @@ def test_train_adversarial_algorithm_value_error(tmpdir):
             named_configs=base_named_configs,
             config_updates=base_config_updates.new_child(
                 dict(algorithm_kwargs={"BAD_VALUE": "bar"}),
-            ),
-        )
-
-    with pytest.raises(FileNotFoundError, match=".*BAD_VALUE.*"):
-        train_adversarial.train_adversarial_ex.run(
-            command_name="gail",
-            named_configs=base_named_configs,
-            config_updates=base_config_updates.new_child(
-                {"demonstrations.rollout_path": "path/BAD_VALUE"},
             ),
         )
 
@@ -344,7 +320,6 @@ def test_transfer_learning(tmpdir: str) -> None:
         named_configs=["cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
         config_updates=dict(
             common=dict(log_dir=log_dir_train),
-            demonstrations=dict(rollout_path=CARTPOLE_TEST_ROLLOUT_PATH),
         ),
     )
     assert run.status == "COMPLETED"
@@ -381,10 +356,6 @@ PARALLEL_CONFIG_UPDATES = [
     dict(
         sacred_ex_name="train_adversarial",
         base_named_configs=["cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
-        base_config_updates={
-            # Need absolute path because raylet runs in different working directory.
-            "demonstrations.rollout_path": CARTPOLE_TEST_ROLLOUT_PATH.absolute(),
-        },
         search_space={
             "command_name": tune.grid_search(["gail", "airl"]),
         },
@@ -441,18 +412,6 @@ def test_parallel_arg_errors(tmpdir):
         )
 
 
-def _generate_test_rollouts(tmpdir: str, env_named_config: str) -> pathlib.Path:
-    tmpdir = pathlib.Path(tmpdir)
-    train_rl.train_rl_ex.run(
-        named_configs=[env_named_config] + ALGO_FAST_CONFIGS["rl"],
-        config_updates=dict(
-            common=dict(log_dir=tmpdir),
-        ),
-    )
-    rollout_path = tmpdir / "rollouts/final.pkl"
-    return rollout_path.absolute()
-
-
 def test_parallel_train_adversarial_custom_env(tmpdir):
     import gym
 
@@ -461,7 +420,6 @@ def test_parallel_train_adversarial_custom_env(tmpdir):
     except gym.error.DependencyNotInstalled:  # pragma: no cover
         pytest.skip("mujoco_py not available")
     env_named_config = "seals_ant"
-    rollout_path = _generate_test_rollouts(tmpdir, env_named_config)
 
     config_updates = dict(
         sacred_ex_name="train_adversarial",
@@ -469,7 +427,6 @@ def test_parallel_train_adversarial_custom_env(tmpdir):
         base_named_configs=[env_named_config] + ALGO_FAST_CONFIGS["adversarial"],
         base_config_updates=dict(
             common=dict(log_root=tmpdir),
-            demonstrations=dict(rollout_path=rollout_path),
         ),
         search_space=dict(command_name="gail"),
     )
@@ -484,7 +441,6 @@ def _run_train_adv_for_test_analyze_imit(run_name, sacred_logs_dir, log_dir):
         named_configs=["cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
         config_updates=dict(
             common=dict(log_root=log_dir),
-            demonstrations=dict(rollout_path=CARTPOLE_TEST_ROLLOUT_PATH),
             checkpoint_interval=-1,
         ),
         options={"--name": run_name, "--file_storage": sacred_logs_dir},
@@ -498,7 +454,6 @@ def _run_train_bc_for_test_analyze_imit(run_name, sacred_logs_dir, log_dir):
         named_configs=["cartpole"] + ALGO_FAST_CONFIGS["imitation"],
         config_updates=dict(
             common=dict(log_dir=log_dir),
-            demonstrations=dict(rollout_path=CARTPOLE_TEST_ROLLOUT_PATH),
         ),
         options={"--name": run_name, "--file_storage": sacred_logs_dir},
     )
@@ -564,22 +519,3 @@ def test_analyze_gather_tb(tmpdir: str):
     assert isinstance(run.result, dict)
     assert run.result["n_tb_dirs"] == 2
 
-
-def test_convert_trajs_in_place(tmpdir: str):
-    shutil.copy(CARTPOLE_TEST_ROLLOUT_PATH, tmpdir)
-    tmp_path = os.path.join(tmpdir, os.path.basename(CARTPOLE_TEST_ROLLOUT_PATH))
-    exit_code = subprocess.call(
-        ["python", "-m", "imitation.scripts.convert_trajs_in_place", tmp_path],
-    )
-    assert exit_code == 0
-
-    shutil.copy(tmp_path, tmp_path + ".new")
-    exit_code = subprocess.call(
-        ["python", "-m", "imitation.scripts.convert_trajs_in_place", tmp_path],
-    )
-    assert exit_code == 0
-
-    assert filecmp.cmp(
-        tmp_path,
-        tmp_path + ".new",
-    ), "convert_trajs_in_place not idempotent"
