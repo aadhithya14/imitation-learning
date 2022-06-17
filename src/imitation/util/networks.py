@@ -76,7 +76,7 @@ class BaseNorm(nn.Module, ABC):
         self.running_var.fill_(1)
         self.count.zero_()
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, x: th.Tensor, revise=False) -> th.Tensor:
         """Updates statistics if in training mode. Returns normalized `x`."""
         if self.training:
             # Do not backpropagate through updating running mean and variance.
@@ -84,7 +84,7 @@ class BaseNorm(nn.Module, ABC):
             # is not needed as the running mean and variance are updated
             # directly by this function, and not by gradient descent.
             with th.no_grad():
-                self.update_stats(x)
+                self.update_stats(x, revise=revise)
 
         return (x - self.running_mean) / th.sqrt(self.running_var + self.eps)
 
@@ -104,7 +104,7 @@ class RunningNorm(BaseNorm):
     observations, such as using `VecNormalize` in Stable Baselines.
     """
 
-    def update_stats(self, batch: th.Tensor) -> None:
+    def update_stats(self, batch: th.Tensor, revise=False) -> None:
         """Update `self.running_mean`, `self.running_var` and `self.count`.
 
         Uses Chan et al (1979), "Updating Formulae and a Pairwise Algorithm for
@@ -114,6 +114,7 @@ class RunningNorm(BaseNorm):
         Args:
             batch: A batch of data to use to update the running mean and variance.
         """
+        del revise
         batch_mean = th.mean(batch, dim=0)
         batch_var = th.var(batch, dim=0, unbiased=False)
         batch_count = batch.shape[0]
@@ -162,7 +163,14 @@ class EMANorm(BaseNorm):
         self.lamb = lamb
         self.r = r
 
-    def update_stats(self, batch: th.Tensor) -> None:
+    def reset_running_stats(self) -> None:
+        """Resets running stats to defaults, yielding the identity transformation."""
+        self.reset = True
+        # self.running_mean.zero_()
+        # self.running_var.fill_(0)
+        self.count.zero_()
+
+    def update_stats(self, batch: th.Tensor, revise=False) -> None:
         """Update `self.running_mean` and `self.running_var`.
 
         Uses Macgregor & Harris (1993), "The Exponentially Weighted Moving Variance".
@@ -173,19 +181,49 @@ class EMANorm(BaseNorm):
         if len(batch.shape) == 1:  # Assume list is a batch of 1-d vectors
             batch = batch.unsqueeze(-1)
 
-        b_size = batch.shape[0]
-        b_mean = th.mean(batch, dim=0)
-        self.running_mean *= 1 - self.lamb
-        self.running_mean += b_mean * self.lamb
+        if not revise:
+            b_size = batch.shape[0]
+            b_mean = th.mean(batch, dim=0)
+            self.running_mean *= 1 - self.lamb
+            self.running_mean += b_mean * self.lamb
 
-        centered = self.running_mean.unsqueeze(0) - batch
+            centered = self.running_mean.unsqueeze(0) - batch
 
-        b_var = th.sum(th.square(centered), dim=0) / b_size
+            b_var = th.sum(th.square(centered), dim=0) / b_size
 
-        self.running_var *= 1 - self.r
-        self.running_var += self.r * b_var
+            self.running_var *= 1 - self.r
+            self.running_var += self.r * b_var
 
-        self.count += b_size
+            self.count += b_size
+        else:
+            b_size = batch.shape[0]
+            b_mean = th.mean(batch, dim=0)
+            diff = b_mean - self.running_mean
+            incr = self.lamb * diff
+
+            self.running_mean = self.running_mean + incr
+            self.running_var = (1 - self.lamb) * (self.running_var + diff * incr)
+
+            self.count += b_size
+
+    def forward(self, x: th.Tensor, revise=False) -> th.Tensor:
+        """Updates statistics if in training mode. Returns normalized `x`."""
+        if self.reset:
+            if self.training:
+                self.running_mean = th.mean(x, dim=0)
+                self.running_var.fill_(0)
+                self.reset = False
+                self.count += x.shape[0]
+            return x
+        else:
+            if self.training:
+                # Do not backpropagate through updating running mean and variance.
+                # These updates are in-place and not differentiable. The gradient
+                # is not needed as the running mean and variance are updated
+                # directly by this function, and not by gradient descent.
+                with th.no_grad():
+                    self.update_stats(x, revise=revise)
+            return (x - self.running_mean) / th.sqrt(self.running_var + self.eps)
 
 
 def build_mlp(

@@ -2,7 +2,7 @@
 
 import functools
 import math
-from typing import Type
+from typing import Optional, Type
 
 import pytest
 import torch as th
@@ -104,6 +104,76 @@ def test_running_norm_matches_dist(batch_size: int) -> None:
     assert running_norm.count == num_samples
 
 
+@pytest.mark.parametrize("batch_size", [1, 2])
+@pytest.mark.parametrize("decay_rate", [0.99, 0.98, 0.9, 0.5, 0.01])
+def test_running_norm_matches_exactly(batch_size: int, decay_rate: float) -> None:
+    """Test running norm converges to empirical distribution."""
+    if decay_rate is None:
+        running_norm = networks.RunningNorm(1)
+    else:
+        lamb = r = 1 - decay_rate
+        running_norm = networks.EMANorm(1, lamb=lamb, r=r)
+    
+    running_norm.train()
+    data = th.as_tensor([float(i) for i in range(9)] * 2)
+    num_samples = len(data)
+    num_batches = num_samples // batch_size
+    
+    batch_means = []
+    batch_weights = []
+
+    if decay_rate:
+        weights = []
+        for i in range(1, num_batches + 1):
+            _weights = []
+            if i == 1:
+                _weights = [decay_rate ** (num_batches - 1)]
+            else:
+                _weights.append(decay_rate ** (num_batches - i) * (1 - decay_rate))
+            weights += _weights * batch_size
+            batch_weights += _weights
+        weights = th.as_tensor(weights).view(-1, 1)
+        batch_weights = th.as_tensor(batch_weights).view(-1, 1)
+        weights /= batch_size
+        th.testing.assert_close(weights.sum(), th.tensor(1.))
+        assert len(weights) == num_samples
+    
+    data = data.view(-1, 1)
+    with th.random.fork_rng():
+        th.random.manual_seed(42)
+        for start in range(0, num_samples, batch_size):
+            batch = data[start : start + batch_size]
+            batch_means.append(th.mean(batch, dim=0))
+            running_norm.forward(batch, revise=True)
+        batch_means = th.cat(batch_means)
+    batch_means = batch_means.view(-1, 1)
+
+
+    empirical_mean = th.mean(data, dim=0)
+    empirical_var = th.var(data, dim=0, unbiased=False)
+    empirical_var_batch_means = th.var(batch_means, dim=0, unbiased=False)
+    if decay_rate:
+        empirical_mean = th.mul(weights, data).sum(dim=0)
+        empirical_var = th.mul(weights, th.square(data - empirical_mean)).sum(dim=0)
+        empirical_var_batch_means = th.mul(batch_weights, th.square(batch_means - empirical_mean)).sum(dim=0)
+
+    # normalized = th.Tensor([[-1.0], [0.0], [1.0], [42.0]])
+    # normalized = th.tile(normalized, (1, 3))
+    # scaled = normalized * th.sqrt(empirical_var + running_norm.eps) + empirical_mean
+    running_norm.eval()
+    # for i in range(5):
+    #     th.testing.assert_close(running_norm.forward(scaled), normalized)
+
+    # Stats should match empirical mean (and be unchanged by eval)
+    print(running_norm.running_mean, empirical_mean)
+    print(running_norm.running_var, empirical_var)
+    print(running_norm.running_var, empirical_var_batch_means)
+    th.testing.assert_close(running_norm.running_mean, empirical_mean)
+    th.testing.assert_close(running_norm.running_var, empirical_var)
+    th.testing.assert_close(running_norm.running_var, empirical_var_batch_means)
+    assert running_norm.count == num_samples
+
+
 @pytest.mark.parametrize("batch_size", [1, 8])
 @pytest.mark.parametrize("normalization_layer", NORMALIZATION_LAYERS)
 def test_parameters_converge(
@@ -129,6 +199,8 @@ def test_parameters_converge(
 
     running_norm.eval()
 
+    print(running_norm.running_mean, mean)
+    print(running_norm.running_var, var)
     th.testing.assert_close(running_norm.running_mean, mean, rtol=0.03, atol=10)
     th.testing.assert_close(running_norm.running_var, var, rtol=0.1, atol=10)
 
