@@ -3,7 +3,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common import policies
 
 
-def load_expert_policy(env_name: str) -> policies.BasePolicy:
+def load_expert_policy(env_name: str, venv = None):
     """Loads expert policy from huggingface hub.
 
     Args:
@@ -14,5 +14,5 @@ def load_expert_policy(env_name: str) -> policies.BasePolicy:
     return PPO.load(
         load_from_hub(
             f"ernestumorga/ppo-{env_name.replace('/', '-')}", f"ppo-{env_name}.zip"
-        )
-    ).policy
+        ), env = venv
+    )

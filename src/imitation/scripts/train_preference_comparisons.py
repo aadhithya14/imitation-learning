@@ -134,7 +134,7 @@ def train_preference_comparisons(
 
     reward_net = reward.make_reward_net(venv)
     if load_expert:
-        agent = experts.load_expert_policy(_run.config['common']['env_name'])  # TODO(ernestum): is there a better way to get the env name?
+        agent = experts.load_expert_policy(_run.config['common']['env_name'], venv)  # TODO(ernestum): is there a better way to get the env name?
         custom_logger.info(f"Warm starting agent from huggingface hub")
     else:
         agent = rl_common.make_rl_algo(venv)

@@ -78,7 +78,7 @@ def train_imitation(
     expert_trajs = None
     if not use_dagger or dagger["use_offline_rollouts"]:
         env_name = _run.config["common"]["env_name"]  # TODO(ernestum): is there a nice way to get the env name?
-        expert_policy = load_expert_policy(env_name)
+        expert_policy = load_expert_policy(env_name, venv)
         expert_trajs = demonstrations.generate_expert_trajs(expert_policy, env_name)
 
     bc_trainer = BC(
@@ -97,7 +97,7 @@ def train_imitation(
             bc_train_kwargs["n_batches"] = 50_000
 
     if use_dagger:
-        expert_policy = load_expert_policy(_run.config["common"]["env_name"])  # TODO(ernestum): is there a nice way to get the env name?
+        expert_policy = load_expert_policy(_run.config["common"]["env_name"], venv)  # TODO(ernestum): is there a nice way to get the env name?
         model = SimpleDAggerTrainer(
             venv=venv,
             scratch_dir=osp.join(log_dir, "scratch"),
@@ -153,4 +153,5 @@ def main_console():
 
 
 if __name__ == "__main__":
+    print("Called with:", " ".join(sys.argv))
     main_console()
