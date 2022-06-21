@@ -104,7 +104,7 @@ def test_train_preference_comparisons_main(tmpdir, config):
     config_updates = dict(common=dict(log_root=tmpdir))
     sacred.utils.recursive_update(config_updates, config)
     run = train_preference_comparisons.train_preference_comparisons_ex.run(
-        named_configs=["cartpole"] + ALGO_FAST_CONFIGS["preference_comparison"],
+        named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["preference_comparison"],
         config_updates=config_updates,
     )
     assert run.status == "COMPLETED"
@@ -122,7 +122,7 @@ def test_train_preference_comparisons_main(tmpdir, config):
 def test_train_preference_comparisons_reward_norm_named_config(tmpdir, named_configs):
     config_updates = dict(common=dict(log_root=tmpdir))
     run = train_preference_comparisons.train_preference_comparisons_ex.run(
-        named_configs=["cartpole"]
+        named_configs=["seals_cartpole"]
         + ALGO_FAST_CONFIGS["preference_comparison"]
         + named_configs,
         config_updates=config_updates,
@@ -141,7 +141,7 @@ def test_train_dagger_main(tmpdir):
     with pytest.warns(None) as record:
         run = train_imitation.train_imitation_ex.run(
             command_name="dagger",
-            named_configs=["cartpole"] + ALGO_FAST_CONFIGS["imitation"],
+            named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["imitation"],
             config_updates=dict(
                 common=dict(log_root=tmpdir),
                 dagger=dict(
@@ -163,7 +163,7 @@ def test_train_dagger_main(tmpdir):
 def test_train_bc_main(tmpdir):
     run = train_imitation.train_imitation_ex.run(
         command_name="bc",
-        named_configs=["cartpole"] + ALGO_FAST_CONFIGS["imitation"],
+        named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["imitation"],
         config_updates=dict(
             common=dict(log_root=tmpdir),
         ),
@@ -175,7 +175,7 @@ def test_train_bc_main(tmpdir):
 def test_train_rl_main(tmpdir):
     """Smoke test for imitation.scripts.train_rl.rollouts_and_policy."""
     run = train_rl.train_rl_ex.run(
-        named_configs=["cartpole"] + ALGO_FAST_CONFIGS["rl"],
+        named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["rl"],
         config_updates=dict(
             common=dict(log_root=tmpdir),
         ),
@@ -188,7 +188,7 @@ def test_train_rl_wb_logging(tmpdir):
     """Smoke test for imitation.scripts.common.common.wandb_logging."""
     with pytest.raises(Exception, match=".*api_key not configured.*"):
         train_rl.train_rl_ex.run(
-            named_configs=["cartpole"]
+            named_configs=["seals_cartpole"]
             + ALGO_FAST_CONFIGS["rl"]
             + ["common.wandb_logging"],
             config_updates=dict(
@@ -251,7 +251,7 @@ def _check_train_ex_result(result: dict):
 )
 def test_train_adversarial(tmpdir, named_configs):
     """Smoke test for imitation.scripts.train_adversarial."""
-    named_configs = named_configs + ["cartpole"] + ALGO_FAST_CONFIGS["adversarial"]
+    named_configs = named_configs + ["seals_cartpole"] + ALGO_FAST_CONFIGS["adversarial"]
     config_updates = {
         "common": {
             "log_root": tmpdir,
@@ -270,7 +270,7 @@ def test_train_adversarial(tmpdir, named_configs):
 
 def test_train_adversarial_algorithm_value_error(tmpdir):
     """Error on bad algorithm arguments."""
-    base_named_configs = ["cartpole"] + ALGO_FAST_CONFIGS["adversarial"]
+    base_named_configs = ["seals_cartpole"] + ALGO_FAST_CONFIGS["adversarial"]
     base_config_updates = collections.ChainMap(
         {
             "common": {
@@ -311,7 +311,7 @@ def test_transfer_learning(tmpdir: str) -> None:
     log_dir_train = tmpdir / "train"
     run = train_adversarial.train_adversarial_ex.run(
         command_name="airl",
-        named_configs=["cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
+        named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
         config_updates=dict(
             common=dict(log_dir=log_dir_train),
         ),
@@ -324,7 +324,7 @@ def test_transfer_learning(tmpdir: str) -> None:
     log_dir_data = tmpdir / "train_rl"
     reward_path = log_dir_train / "checkpoints" / "final" / "reward_test.pt"
     run = train_rl.train_rl_ex.run(
-        named_configs=["cartpole"] + ALGO_FAST_CONFIGS["rl"],
+        named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["rl"],
         config_updates=dict(
             common=dict(log_dir=log_dir_data),
             reward_type="RewardNet_shaped",
@@ -338,7 +338,7 @@ def test_transfer_learning(tmpdir: str) -> None:
 PARALLEL_CONFIG_UPDATES = [
     dict(
         sacred_ex_name="train_rl",
-        base_named_configs=["cartpole"] + ALGO_FAST_CONFIGS["rl"],
+        base_named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["rl"],
         n_seeds=2,
         search_space={
             "config_updates": {
@@ -349,7 +349,7 @@ PARALLEL_CONFIG_UPDATES = [
     ),
     dict(
         sacred_ex_name="train_adversarial",
-        base_named_configs=["cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
+        base_named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
         search_space={
             "command_name": tune.grid_search(["gail", "airl"]),
         },
@@ -432,7 +432,7 @@ def test_parallel_train_adversarial_custom_env(tmpdir):
 def _run_train_adv_for_test_analyze_imit(run_name, sacred_logs_dir, log_dir):
     run = train_adversarial.train_adversarial_ex.run(
         command_name="gail",
-        named_configs=["cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
+        named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["adversarial"],
         config_updates=dict(
             common=dict(log_root=log_dir),
             checkpoint_interval=-1,
@@ -445,7 +445,7 @@ def _run_train_adv_for_test_analyze_imit(run_name, sacred_logs_dir, log_dir):
 def _run_train_bc_for_test_analyze_imit(run_name, sacred_logs_dir, log_dir):
     run = train_imitation.train_imitation_ex.run(
         command_name="bc",
-        named_configs=["cartpole"] + ALGO_FAST_CONFIGS["imitation"],
+        named_configs=["seals_cartpole"] + ALGO_FAST_CONFIGS["imitation"],
         config_updates=dict(
             common=dict(log_dir=log_dir),
         ),
