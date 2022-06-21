@@ -34,7 +34,7 @@ def train_defaults():
         "epochs": 3,
     }
     save_preferences = False  # save preference dataset at the end?
-    agent_path = None  # path to a (partially) trained agent to load at the beginning
+    load_expert = False  # whether to load an expert from huggingface hub
     # type of PreferenceGatherer to use
     gatherer_cls = preference_comparisons.SyntheticGatherer
     # arguments passed on to the PreferenceGatherer specified by gatherer_cls

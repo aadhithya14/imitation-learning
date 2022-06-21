@@ -82,6 +82,9 @@ PREFERENCE_COMPARISON_CONFIGS = [
         "checkpoint_interval": 1,
         # Test that we can save checkpoints
     },
+    {
+        "load_expert": True
+    }
 ]
 
 ALGO_FAST_CONFIGS = {

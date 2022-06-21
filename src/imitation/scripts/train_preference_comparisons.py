@@ -13,7 +13,7 @@ from sacred.observers import FileStorageObserver
 from imitation.algorithms import preference_comparisons
 from imitation.data import types
 from imitation.policies import serialize
-from imitation.scripts.common import common, reward
+from imitation.scripts.common import common, experts, reward
 from imitation.scripts.common import rl as rl_common
 from imitation.scripts.common import train
 from imitation.scripts.config.train_preference_comparisons import (
@@ -66,7 +66,7 @@ def train_preference_comparisons(
     trajectory_path: Optional[str],
     trajectory_generator_kwargs: Mapping[str, Any],
     save_preferences: bool,
-    agent_path: Optional[str],
+    load_expert: bool,
     reward_trainer_kwargs: Mapping[str, Any],
     gatherer_cls: Type[preference_comparisons.PreferenceGatherer],
     gatherer_kwargs: Mapping[str, Any],
@@ -104,8 +104,8 @@ def train_preference_comparisons(
             sequence of TrajectoryWithRew to be trained on.
         trajectory_generator_kwargs: kwargs to pass to the trajectory generator.
         save_preferences: if True, store the final dataset of preferences to disk.
-        agent_path: if given, initialize the agent using this stored policy
-            rather than randomly.
+        load_expert: if true, initialize the agent using an expert model from
+            huggingface hub rather than randomly.
         reward_trainer_kwargs: passed to CrossEntropyRewardTrainer
         gatherer_cls: type of PreferenceGatherer to use (defaults to SyntheticGatherer)
         gatherer_kwargs: passed to the PreferenceGatherer specified by gatherer_cls
@@ -133,17 +133,11 @@ def train_preference_comparisons(
     venv = common.make_venv()
 
     reward_net = reward.make_reward_net(venv)
-    if agent_path is None:
-        agent = rl_common.make_rl_algo(venv)
+    if load_expert:
+        agent = experts.load_expert_policy(_run.config['common']['env_name'])  # TODO(ernestum): is there a better way to get the env name?
+        custom_logger.info(f"Warm starting agent from huggingface hub")
     else:
-        agent = serialize.load_stable_baselines_model(
-            rl["rl_cls"],
-            agent_path,
-            venv,
-            seed=_seed,
-            **rl["rl_kwargs"],
-        )
-        custom_logger.info(f"Warm starting agent from '{agent_path}'")
+        agent = rl_common.make_rl_algo(venv)
 
     if trajectory_path is None:
         # Setting the logger here is not really necessary (PreferenceComparisons
